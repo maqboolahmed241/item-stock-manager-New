@@ -1,0 +1,6 @@
+{
+  "appId": "com.maqbool.rackstock",
+  "appName": "Rack Stock Management",
+  "webDir": ".",
+  "bundledWebRuntime": false
+}
