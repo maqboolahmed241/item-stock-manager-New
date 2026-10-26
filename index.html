@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#14251f">
+<title>Rack Stock Management</title>
+<style>
+:root{font-family:system-ui,-apple-system,Segoe UI,sans-serif;color:#18231f;background:#f4f6f4}
+*{box-sizing:border-box}body{margin:0}header{background:#14251f;color:white;padding:20px 16px}header h1{margin:0;font-size:1.35rem}header p{margin:6px 0 0;color:#d4e1d8;font-size:.9rem}
+main{max-width:1000px;margin:auto;padding:14px}nav{display:flex;gap:8px;overflow:auto;margin-bottom:14px}button,.tab{border:0;border-radius:10px;padding:11px 14px;font:inherit;font-weight:650;cursor:pointer;background:#e0e8e2;color:#183b2b;white-space:nowrap}.tab.active,button.primary{background:#1f6a49;color:white}
+.card{background:white;border:1px solid #dfe6e0;border-radius:14px;padding:15px;margin-bottom:14px;box-shadow:0 2px 8px #102b1b08}.card h2{font-size:1.05rem;margin:0 0 12px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:10px}label{font-size:.82rem;font-weight:650;display:block;color:#42544a}input,select{display:block;width:100%;margin-top:5px;padding:11px;border:1px solid #cbd6ce;border-radius:8px;background:#fff;font:inherit;color:#17251d}form button{margin-top:12px;width:100%}.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.stat{background:#edf5ef;padding:12px;border-radius:10px}.stat strong{display:block;font-size:1.35rem}.stat span{font-size:.75rem;color:#4b6255}table{width:100%;border-collapse:collapse;font-size:.85rem}th,td{text-align:left;padding:9px;border-bottom:1px solid #e3e9e4;vertical-align:top}th{background:#f2f6f3} .tablewrap{overflow:auto}.muted{color:#617067;font-size:.85rem}.hidden{display:none!important}.warn{background:#fff6df;border:1px solid #ecd69a;padding:10px;border-radius:9px;font-size:.86rem}
+@media(max-width:480px){.stats{grid-template-columns:1fr 1fr}.stats .stat:last-child{grid-column:span 2}th,td{padding:7px}}
+</style>
+</head>
+<body>
+<header><h1>Rack Stock Management</h1><p>Receive • Issue • Search • Stock History</p></header>
+<main>
+<div class="warn"><strong>Setup preview:</strong> this version saves data on this device only. Cloud sync and staff sign-in are not connected yet. Do not use it as the shared live inventory.</div>
+<div class="card"><div class="stats"><div class="stat"><strong id="rackCount">250</strong><span>Racks available</span></div><div class="stat"><strong id="itemCount">0</strong><span>Stock lines in hand</span></div><div class="stat"><strong id="totalQty">0</strong><span>Total available quantity</span></div></div></div>
+<nav><button class="tab active" data-tab="receive">Receive Stock</button><button class="tab" data-tab="issue">Issue Stock</button><button class="tab" data-tab="search">Search Stock</button><button class="tab" data-tab="history">History / Export</button></nav>
+<section id="receive" class="panel card"><h2>Receive Stock</h2><form id="receiveForm"><div class="grid">
+<label>Rack Number<select name="rack" required id="rackSelect"></select></label>
+<label>Customer Name<input name="customer" required></label>
+<label>Party Challan No.<input name="challan" required></label>
+<label>Dia / Gauge<input name="dia"></label>
+<label>Fabric Type<input name="fabric" required></label>
+<label>Count<input name="count"></label>
+<label>Brand<input name="brand"></label>
+<label>Quantity<input name="qty" type="number" min="0.001" step="any" required></label>
+</div><button class="primary" type="submit">Save Stock Receipt</button></form></section>
+<section id="issue" class="panel card hidden"><h2>Issue Stock</h2><form id="issueForm"><div class="grid">
+<label>Rack Number<select name="rack" required class="rackOptions"></select></label>
+<label>Stock Line<select name="item" required id="issueItem"></select></label>
+<label>Issue Quantity<input name="qty" type="number" min="0.001" step="any" required></label>
+<label>Issued To / Customer<input name="to" required></label>
+<label>Challan / Reference<input name="challan"></label>
+</div><button class="primary" type="submit">Record Stock Issue</button></form><p class="muted">Issue quantity cannot exceed available stock. Transactions remain in history.</p></section>
+<section id="search" class="panel card hidden"><h2>Search Stock</h2><label>Rack, customer, challan, fabric or transaction ID<input id="searchInput" placeholder="Type to search…"></label><div id="searchResults" class="tablewrap"></div></section>
+<section id="history" class="panel card hidden"><h2>Transaction History</h2><button id="exportBtn" class="primary">Export CSV</button> <button id="clearSearch">Show All</button><div id="historyTable" class="tablewrap"></div></section>
+<p class="muted">Transaction IDs are generated automatically. Data is kept on this device in this preview.</p>
+</main>
+<script>
+const KEY='rack-stock-preview-v1';
+let data;try{data=JSON.parse(localStorage.getItem(KEY))||{items:[],tx:[]}}catch{data={items:[],tx:[]}}
+const rackNames=Array.from({length:250},(_,i)=>'RACK-'+String(i+1).padStart(3,'0'));
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function save(){localStorage.setItem(KEY,JSON.stringify(data));render()}
+function id(prefix){return prefix+'-'+Date.now().toString(36).toUpperCase()+'-'+Math.random().toString(36).slice(2,6).toUpperCase()}
+function fillRacks(){const opts=rackNames.map(r=>'<option>'+r+'</option>').join('');$('#rackSelect').innerHTML=opts;document.querySelectorAll('.rackOptions').forEach(s=>s.innerHTML=opts)}
+function available(item){return item.received-item.issued}
+function render(){const active=data.items.filter(i=>available(i)>0);$('#itemCount').textContent=active.length;$('#totalQty').textContent=active.reduce((a,i)=>a+available(i),0).toLocaleString();const issueOpts=data.items.filter(i=>available(i)>0).map(i=>'<option value="'+esc(i.id)+'">'+esc(i.rack+' • '+i.fabric+' • '+i.customer+' • available '+available(i))+'</option>').join('');$('#issueItem').innerHTML=issueOpts||'<option value="">No stock available</option>';drawHistory(data.tx);drawSearch()}
+function drawHistory(rows){$('#historyTable').innerHTML='<table><thead><tr><th>Time</th><th>Type / ID</th><th>Rack / Item</th><th>Qty</th><th>Customer / Reference</th></tr></thead><tbody>'+rows.slice().reverse().map(t=>'<tr><td>'+esc(new Date(t.time).toLocaleString())+'</td><td>'+esc(t.type)+'<br>'+esc(t.id)+'</td><td>'+esc(t.rack)+'<br>'+esc(t.fabric||'')+'</td><td>'+esc(t.qty)+'</td><td>'+esc(t.customer||t.to||'')+'<br>'+esc(t.challan||'')+'</td></tr>').join('')+'</tbody></table>'}
+function drawSearch(){const q=($('#searchInput')?.value||'').trim().toLowerCase();const rows=data.items.filter(i=>!q||[i.rack,i.customer,i.challan,i.fabric,i.dia,i.count,i.brand,i.id].some(v=>String(v||'').toLowerCase().includes(q)));$('#searchResults').innerHTML='<table><thead><tr><th>Rack</th><th>Fabric / Specs</th><th>Customer / Challan</th><th>Received</th><th>Issued</th><th>Available</th></tr></thead><tbody>'+rows.map(i=>'<tr><td>'+esc(i.rack)+'<br>'+esc(i.id)+'</td><td>'+esc(i.fabric)+'<br>'+esc(i.dia)+' '+esc(i.count)+' '+esc(i.brand)+'</td><td>'+esc(i.customer)+'<br>'+esc(i.challan)+'</td><td>'+esc(i.received)+'</td><td>'+esc(i.issued)+'</td><td><strong>'+esc(available(i))+'</strong></td></tr>').join('')+'</tbody></table>'}
+document.querySelectorAll('[data-tab]').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('.panel').forEach(p=>p.classList.add('hidden'));$('#'+b.dataset.tab).classList.remove('hidden');document.querySelectorAll('[data-tab]').forEach(x=>x.classList.toggle('active',x===b));if(b.dataset.tab==='issue')render()}));
+$('#receiveForm').addEventListener('submit',e=>{e.preventDefault();const f=new FormData(e.target),qty=Number(f.get('qty'));if(!(qty>0))return alert('Enter a quantity greater than zero.');const item={id:id('STK'),rack:f.get('rack'),customer:f.get('customer').trim(),challan:f.get('challan').trim(),dia:f.get('dia').trim(),fabric:f.get('fabric').trim(),count:f.get('count').trim(),brand:f.get('brand').trim(),received:qty,issued:0};data.items.push(item);data.tx.push({id:id('RCV'),type:'RECEIVE',time:new Date().toISOString(),rack:item.rack,fabric:item.fabric,qty,customer:item.customer,challan:item.challan,itemId:item.id});e.target.reset();save();alert('Receipt saved. Transaction ID: '+data.tx[data.tx.length-1].id)});
+$('#issueForm').addEventListener('submit',e=>{e.preventDefault();const f=new FormData(e.target),item=data.items.find(i=>i.id===f.get('item')),qty=Number(f.get('qty'));if(!item||item.rack!==f.get('rack'))return alert('Choose a stock line matching the selected rack.');if(!(qty>0)||qty>available(item))return alert('Issue quantity must be greater than zero and no more than available stock ('+available(item)+').');item.issued+=qty;data.tx.push({id:id('ISS'),type:'ISSUE',time:new Date().toISOString(),rack:item.rack,fabric:item.fabric,qty,to:f.get('to').trim(),challan:f.get('challan').trim(),itemId:item.id});save();alert('Issue saved. Transaction ID: '+data.tx[data.tx.length-1].id)});
+$('#searchInput').addEventListener('input',drawSearch);$('#clearSearch').addEventListener('click',()=>{drawHistory(data.tx)});
+$('#exportBtn').addEventListener('click',()=>{const cols=['id','type','time','rack','fabric','qty','customer','to','challan','itemId'];const csv=[cols.join(','),...data.tx.map(t=>cols.map(k=>'"'+String(t[k]??'').replace(/"/g,'""')+'"').join(','))].join('\r\n');const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));a.download='rack-stock-transactions.csv';a.click();URL.revokeObjectURL(a.href)});
+fillRacks();render();
+</script>
+</body></html>
