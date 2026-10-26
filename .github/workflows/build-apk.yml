@@ -28,6 +28,8 @@ jobs:
           java-version: '21'
       - name: Install dependencies
         run: npm install
+      - name: Prepare web assets
+        run: mkdir -p www && cp index.html www/index.html
       - name: Generate Android project
         run: npx cap add android
       - name: Sync web assets
