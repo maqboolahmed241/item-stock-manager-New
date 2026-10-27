@@ -16,7 +16,8 @@ main{max-width:1000px;margin:auto;padding:14px}nav{display:flex;gap:8px;overflow
 <body>
 <header><h1>Rack Stock Management</h1><p>Receive • Issue • Search • Stock History</p></header>
 <main>
-<div class="warn"><strong>Setup preview:</strong> this version saves data on this device only. Cloud sync and staff sign-in are not connected yet. Do not use it as the shared live inventory.</div>
+<div class="warn"><strong>Cloud setup:</strong> Sign in with the same account on both phones to sync rack stock. Keep your email and password private.</div>
+<div class="card" id="cloudCard"><h2>Cloud Login / Sync</h2><p class="muted" id="cloudStatus">Not signed in. Your existing records remain saved on this device.</p><form id="cloudForm"><div class="grid"><label>Email<input id="cloudEmail" type="email" autocomplete="email" required></label><label>Password<input id="cloudPassword" type="password" autocomplete="current-password" minlength="6" required></label></div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button class="primary" type="submit" id="loginBtn">Sign in</button><button type="button" id="signupBtn">Create account</button><button type="button" id="syncBtn">Sync now</button><button type="button" id="logoutBtn">Sign out</button></div></form><p class="muted">First use: create one account, then sign in with that same account on the second phone. When cloud is empty, this phone's existing records will be uploaded first.</p></div>
 <div class="card"><div class="stats"><div class="stat"><strong id="rackCount">250</strong><span>Racks available</span></div><div class="stat"><strong id="itemCount">0</strong><span>Stock lines in hand</span></div><div class="stat"><strong id="totalQty">0</strong><span>Total available quantity</span></div></div></div>
 <nav><button class="tab active" data-tab="receive">Receive Stock</button><button class="tab" data-tab="issue">Issue Stock</button><button class="tab" data-tab="search">Search Stock</button><button class="tab" data-tab="history">History / Export</button><button type="button" id="adminBtn">Admin PIN / Login</button></nav>
 <section id="receive" class="panel card"><h2>Receive Stock</h2><form id="receiveForm"><div class="grid">
@@ -43,13 +44,63 @@ main{max-width:1000px;margin:auto;padding:14px}nav{display:flex;gap:8px;overflow
 <section id="history" class="panel card hidden"><h2>Transaction History</h2><button id="exportBtn" class="primary">Export CSV</button> <button id="clearSearch">Show All</button><div id="historyTable" class="tablewrap"></div></section>
 <p class="muted">Transaction IDs are generated automatically. Data is kept on this device in this preview.</p>
 </main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
+const SUPABASE_URL="https://xgodqvkavczpeziliinc.supabase.co";
+const SUPABASE_KEY="sb_publishable_hbQapnbAfT0ZuUWykyYIFQ_bp8YBg1K";
+const cloud=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
+let cloudUser=null; let cloudBusy=false;
 const KEY='rack-stock-preview-v1';
 let adminMode=false;let data;try{data=JSON.parse(localStorage.getItem(KEY))||{items:[],tx:[]}}catch{data={items:[],tx:[]}}
 const rackNames=Array.from({length:250},(_,i)=>'RACK-'+String(i+1).padStart(3,'0'));
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-function save(){localStorage.setItem(KEY,JSON.stringify(data));render()}
+function save(){localStorage.setItem(KEY,JSON.stringify(data));render();if(cloudUser&&!cloudBusy)pushCloud().catch(e=>cloudMessage('Cloud sync error: '+(e.message||e)));}
+function cloudMessage(s){const el=$('#cloudStatus');if(el)el.textContent=s;}
+async function pushCloud(){
+ if(!cloudUser)return;
+ const uid=cloudUser.id;
+ const items=data.items.map(x=>({user_id:uid,id:String(x.id),data:x,updated_at:new Date().toISOString()}));
+ const tx=data.tx.map(x=>({user_id:uid,id:String(x.id),data:x,updated_at:new Date().toISOString()}));
+ if(items.length){const {error}=await cloud.from('stock_items').upsert(items,{onConflict:'user_id,id'});if(error)throw error;}
+ if(tx.length){const {error}=await cloud.from('stock_transactions').upsert(tx,{onConflict:'user_id,id'});if(error)throw error;}
+ cloudMessage('Signed in as '+cloudUser.email+'. Cloud sync completed at '+new Date().toLocaleTimeString()+'.');
+}
+async function syncCloud(){
+ if(!cloudUser){cloudMessage('Please sign in first.');return;}
+ cloudBusy=true;
+ try{
+  const uid=cloudUser.id;
+  const [ir,tr]=await Promise.all([
+   cloud.from('stock_items').select('id,data').eq('user_id',uid),
+   cloud.from('stock_transactions').select('id,data').eq('user_id',uid)
+  ]);
+  if(ir.error)throw ir.error;if(tr.error)throw tr.error;
+  const ci=ir.data||[],ct=tr.data||[];
+  if(ci.length===0&&ct.length===0&&(data.items.length||data.tx.length)){
+   await pushCloud();
+  }else{
+   const itemMap=new Map(ci.map(r=>[String(r.id),r.data]));
+   const txMap=new Map(ct.map(r=>[String(r.id),r.data]));
+   let newItems=data.items.filter(x=>!itemMap.has(String(x.id)));
+   let newTx=data.tx.filter(x=>!txMap.has(String(x.id)));
+   if(newItems.length){const {error}=await cloud.from('stock_items').upsert(newItems.map(x=>({user_id:uid,id:String(x.id),data:x})),{onConflict:'user_id,id'});if(error)throw error;}
+   if(newTx.length){const {error}=await cloud.from('stock_transactions').upsert(newTx.map(x=>({user_id:uid,id:String(x.id),data:x})),{onConflict:'user_id,id'});if(error)throw error;}
+   newItems.forEach(x=>itemMap.set(String(x.id),x));newTx.forEach(x=>txMap.set(String(x.id),x));
+   data.items=Array.from(itemMap.values());data.tx=Array.from(txMap.values());
+   localStorage.setItem(KEY,JSON.stringify(data));render();
+   cloudMessage('Signed in as '+cloudUser.email+'. Synced '+data.items.length+' stock lines and '+data.tx.length+' transactions.');
+  }
+ }catch(e){cloudMessage('Sync failed: '+(e.message||e));}
+ finally{cloudBusy=false;}
+}
+async function refreshCloudSession(){
+ const {data:res}=await cloud.auth.getSession();
+ cloudUser=res.session?.user||null;
+ if(cloudUser){cloudMessage('Signed in as '+cloudUser.email+'. Syncing…');await syncCloud();}
+ else cloudMessage('Not signed in. Existing records remain saved on this device.');
+}
+
 function id(prefix){return prefix+'-'+Date.now().toString(36).toUpperCase()+'-'+Math.random().toString(36).slice(2,6).toUpperCase()}
 function fillRacks(){const opts=rackNames.map(r=>'<option>'+r+'</option>').join('');$('#rackSelect').innerHTML=opts;document.querySelectorAll('.rackOptions').forEach(s=>s.innerHTML=opts)}
 function available(item){return item.received-item.issued}
@@ -73,6 +124,13 @@ $('#smsReport').addEventListener('click',()=>{location.href='sms:?body='+encodeU
 $('#printReport').addEventListener('click',()=>{const w=window.open('','_blank');if(!w){alert('Allow pop-ups to print or save PDF.');return;}w.document.write('<html><head><title>Rack Stock Report</title><style>body{font:14px Arial;padding:24px}pre{white-space:pre-wrap;word-break:break-word}</style></head><body><h2>Rack Stock Report</h2><pre>'+esc(reportText())+'</pre><script>window.onload=()=>window.print()<\/script></body></html>');w.document.close()});
 $('#searchInput').addEventListener('input',drawSearch);$('#clearSearch').addEventListener('click',()=>{drawHistory(data.tx)});
 $('#exportBtn').addEventListener('click',()=>{const cols=['id','type','time','rack','fabric','qty','color','party','customer','to','challan','itemId','editedAt'];const csv=[cols.join(','),...data.tx.map(t=>cols.map(k=>'"'+String(t[k]??'').replace(/"/g,'""')+'"').join(','))].join('\r\n');const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));a.download='rack-stock-transactions.csv';a.click();URL.revokeObjectURL(a.href)});
-fillRacks();render();
+
+$('#cloudForm').addEventListener('submit',async e=>{e.preventDefault();const email=$('#cloudEmail').value.trim(),password=$('#cloudPassword').value;cloudMessage('Signing in…');const {data:res,error}=await cloud.auth.signInWithPassword({email,password});if(error){cloudMessage('Sign in failed: '+error.message);return;}cloudUser=res.user;await syncCloud();});
+$('#signupBtn').addEventListener('click',async()=>{const email=$('#cloudEmail').value.trim(),password=$('#cloudPassword').value;if(!email||password.length<6){cloudMessage('Enter an email and a password of at least 6 characters.');return;}cloudMessage('Creating account…');const {data:res,error}=await cloud.auth.signUp({email,password});if(error){cloudMessage('Account creation failed: '+error.message);return;}if(res.session){cloudUser=res.user;await syncCloud();}else cloudMessage('Account created. Check your email for the confirmation link, then sign in.');});
+$('#syncBtn').addEventListener('click',()=>syncCloud());
+$('#logoutBtn').addEventListener('click',async()=>{const {error}=await cloud.auth.signOut();if(error){cloudMessage('Sign out failed: '+error.message);return;}cloudUser=null;cloudMessage('Signed out. Local records remain saved on this device.');});
+cloud.auth.onAuthStateChange((event,session)=>{cloudUser=session?.user||null;if(event==='SIGNED_IN'&&cloudUser)setTimeout(()=>syncCloud(),0);});
+fillRacks();render();refreshCloudSession();
+
 </script>
 </body></html>
