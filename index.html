@@ -217,10 +217,10 @@ $('#backupJsonBtn').addEventListener('click',async()=>{
  const json=JSON.stringify(makePhoneBackup(),null,2);
  try{
   status.textContent='فائل تیار ہو رہی ہے…';
-  if(window.NativeRackPlugins&&window.NativeRackPlugins.saveBackup){
-   const result=await window.NativeRackPlugins.saveBackup(json,filename);
-   status.textContent='✓ بیک اپ محفوظ ہو گیا۔ فائل: '+filename;
-   alert('بیک اپ کامیابی سے محفوظ ہو گیا۔ اب آپ کی منتخب کردہ جگہ پر JSON فائل موجود ہے۔');
+  if(window.NativeRackPlugins&&window.NativeRackPlugins.saveAndShareBackup){
+   status.textContent='بیک اپ تیار ہے، محفوظ کرنے کا آپشن کھل رہا ہے…';
+   await window.NativeRackPlugins.saveAndShareBackup(json,filename);
+   status.textContent='شیئر مینو کھل گیا ہے۔ فائل محفوظ کرنے کے لیے Files یا Save to device منتخب کریں۔';
   }else{
    const blob=new Blob([json],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');
    a.href=url;a.download=filename;a.click();setTimeout(()=>URL.revokeObjectURL(url),3000);
