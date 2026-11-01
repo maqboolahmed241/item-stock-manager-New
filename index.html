@@ -9,7 +9,7 @@
 :root{font-family:system-ui,-apple-system,Segoe UI,sans-serif;color:#18231f;background:#f4f6f4}
 *{box-sizing:border-box}body{margin:0}header{background:#14251f;color:white;padding:20px 16px}header h1{margin:0;font-size:1.35rem}header p{margin:6px 0 0;color:#d4e1d8;font-size:.9rem}
 main{max-width:1000px;margin:auto;padding:14px}nav{display:flex;gap:8px;overflow:auto;margin-bottom:14px}button,.tab{border:0;border-radius:10px;padding:11px 14px;font:inherit;font-weight:650;cursor:pointer;background:#e0e8e2;color:#183b2b;white-space:nowrap}.tab.active,button.primary{background:#1f6a49;color:white}
-.card{background:white;border:1px solid #dfe6e0;border-radius:14px;padding:15px;margin-bottom:14px;box-shadow:0 2px 8px #102b1b08}.card h2{font-size:1.05rem;margin:0 0 12px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:10px}label{font-size:.82rem;font-weight:650;display:block;color:#42544a}input,select{display:block;width:100%;margin-top:5px;padding:11px;border:1px solid #cbd6ce;border-radius:8px;background:#fff;font:inherit;color:#17251d}form button{margin-top:12px;width:100%}.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.stat{background:#edf5ef;padding:12px;border-radius:10px}.stat strong{display:block;font-size:1.35rem}.stat span{font-size:.75rem;color:#4b6255}table{width:100%;border-collapse:collapse;font-size:.85rem}th,td{text-align:left;padding:9px;border-bottom:1px solid #e3e9e4;vertical-align:top}th{background:#f2f6f3} .tablewrap{overflow:auto}.muted{color:#617067;font-size:.85rem}.hidden{display:none!important}.warn{background:#fff6df;border:1px solid #ecd69a;padding:10px;border-radius:9px;font-size:.86rem}
+.card{background:white;border:1px solid #dfe6e0;border-radius:14px;padding:15px;margin-bottom:14px;box-shadow:0 2px 8px #102b1b08}.card h2{font-size:1.05rem;margin:0 0 12px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:10px}label{font-size:.82rem;font-weight:650;display:block;color:#42544a}input,select{display:block;width:100%;margin-top:5px;padding:11px;border:1px solid #cbd6ce;border-radius:8px;background:#fff;font:inherit;color:#17251d}form button{margin-top:12px;width:100%}.addChoice{margin-top:5px;width:100%;padding:7px;font-size:.78rem;background:#edf5ef;color:#1f6a49}.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.stat{background:#edf5ef;padding:12px;border-radius:10px}.stat strong{display:block;font-size:1.35rem}.stat span{font-size:.75rem;color:#4b6255}table{width:100%;border-collapse:collapse;font-size:.85rem}th,td{text-align:left;padding:9px;border-bottom:1px solid #e3e9e4;vertical-align:top}th{background:#f2f6f3} .tablewrap{overflow:auto}.muted{color:#617067;font-size:.85rem}.hidden{display:none!important}.warn{background:#fff6df;border:1px solid #ecd69a;padding:10px;border-radius:9px;font-size:.86rem}
 @media(max-width:480px){.stats{grid-template-columns:1fr 1fr}.stats .stat:last-child{grid-column:span 2}th,td{padding:7px}}
 </style>
 </head>
@@ -25,10 +25,10 @@ main{max-width:1000px;margin:auto;padding:14px}nav{display:flex;gap:8px;overflow
 <label>Party Name<input name="party" required></label>
 <label>Customer Name<input name="customer" required></label>
 <label>Party Challan No.<input name="challan" required></label>
-<label>Dia / Gauge<input name="dia"></label>
-<label>Fabric Type<input name="fabric" required></label>
+<label>Dia / Gauge<select name="dia" id="diaSelect"><option value="">Select Dia / Gauge</option></select><button type="button" class="addChoice" data-list="dia">+ Add Dia / Gauge</button></label>
+<label>Fabric Type<select name="fabric" id="fabricSelect" required><option value="">Select Fabric</option></select><button type="button" class="addChoice" data-list="fabric">+ Add Fabric</button></label>
 <label>Count<input name="count"></label>
-<label>Brand<input name="brand"></label>
+<label>Brand<select name="brand" id="brandSelect"><option value="">Select Brand</option></select><button type="button" class="addChoice" data-list="brand">+ Add Brand</button></label>
 <label>Quantity<input name="qty" type="number" min="0.001" step="any" required></label>
 </div><button class="primary" type="submit">Save Stock Receipt</button></form></section>
 <section id="issue" class="panel card hidden"><h2>Issue Stock</h2><form id="issueForm"><div class="grid">
@@ -102,6 +102,26 @@ async function refreshCloudSession(){
 }
 
 function id(prefix){return prefix+'-'+Date.now().toString(36).toUpperCase()+'-'+Math.random().toString(36).slice(2,6).toUpperCase()}
+const LIST_KEY='rack-stock-master-lists-v1';
+const masterLists=(()=>{try{const v=JSON.parse(localStorage.getItem(LIST_KEY))||{};return {fabric:Array.isArray(v.fabric)?v.fabric:[],dia:Array.isArray(v.dia)?v.dia:[],brand:Array.isArray(v.brand)?v.brand:[]};}catch(e){return {fabric:[],dia:[],brand:[]};}})();
+function saveMasterLists(){localStorage.setItem(LIST_KEY,JSON.stringify(masterLists));}
+function addMasterChoice(type,value){value=String(value||'').trim();if(!value)return false;if(!masterLists[type].some(v=>v.toLowerCase()===value.toLowerCase()))masterLists[type].push(value);masterLists[type].sort((a,b)=>a.localeCompare(b));saveMasterLists();renderMasterLists();return true;}
+function renderMasterLists(){
+ const fields={fabric:['#fabricSelect','Select Fabric'],dia:['#diaSelect','Select Dia / Gauge'],brand:['#brandSelect','Select Brand']};
+ Object.entries(fields).forEach(([type,[selector,placeholder]])=>{
+  const el=$(selector);if(!el)return;const current=el.value;
+  el.innerHTML='<option value="">'+placeholder+'</option>'+masterLists[type].map(v=>'<option value="'+esc(v)+'">'+esc(v)+'</option>').join('');
+  if(masterLists[type].includes(current))el.value=current;
+ });
+}
+document.querySelectorAll('.addChoice').forEach(btn=>btn.addEventListener('click',()=>{
+ const type=btn.dataset.list;const labels={fabric:'Fabric name',dia:'Dia / Gauge',brand:'Brand name'};
+ const value=prompt('Add a new '+labels[type]+'. It will be saved in this phone for future selection:');
+ if(value===null)return;
+ if(!value.trim())return alert('Please enter a name.');
+ addMasterChoice(type,value);
+ const target=$('#'+type+'Select');target.value=value.trim();
+}));
 function fillRacks(){const opts=rackNames.map(r=>'<option>'+r+'</option>').join('');$('#rackSelect').innerHTML=opts;document.querySelectorAll('.rackOptions').forEach(s=>s.innerHTML=opts)}
 function available(item){return item.received-item.issued}
 function render(){const active=data.items.filter(i=>available(i)>0);$('#itemCount').textContent=active.length;$('#totalQty').textContent=active.reduce((a,i)=>a+available(i),0).toLocaleString();const issueOpts=data.items.filter(i=>available(i)>0).map(i=>'<option value="'+esc(i.id)+'">'+esc(i.rack+' • '+i.fabric+' • '+i.customer+' • available '+available(i))+'</option>').join('');$('#issueItem').innerHTML=issueOpts||'<option value="">No stock available</option>';drawHistory(data.tx);drawSearch()}
@@ -135,7 +155,7 @@ $('#signupBtn').addEventListener('click',async()=>{const email=$('#cloudEmail').
 $('#syncBtn').addEventListener('click',()=>syncCloud());
 $('#logoutBtn').addEventListener('click',async()=>{const {error}=await cloud.auth.signOut();if(error){cloudMessage('Sign out failed: '+error.message);return;}cloudUser=null;cloudMessage('Signed out. Local records remain saved on this device.');});
 cloud.auth.onAuthStateChange((event,session)=>{cloudUser=session?.user||null;if(event==='SIGNED_IN'&&cloudUser)setTimeout(()=>syncCloud(),0);});
-fillRacks();render();refreshCloudSession();
+data.items.forEach(i=>{addMasterChoice('fabric',i.fabric);addMasterChoice('dia',i.dia);addMasterChoice('brand',i.brand);});renderMasterLists();fillRacks();render();refreshCloudSession();
 
 </script>
 </body></html>
