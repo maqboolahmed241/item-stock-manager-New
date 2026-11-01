@@ -208,7 +208,7 @@ function reportHtml(){const q=($('#searchInput').value||'').trim().toLowerCase()
 $('#printReport').addEventListener('click',()=>{const w=window.open('','_blank');if(!w){alert('Allow pop-ups to print or save PDF.');return;}w.document.open();w.document.write(reportHtml());w.document.close()});
 $('#searchInput').addEventListener('input',drawSearch);$('#rackFilter').addEventListener('change',drawSearch);$('#clearSearch').addEventListener('click',()=>{$('#searchInput').value='';$('#rackFilter').value='';drawSearch();drawHistory(data.tx)});
 function makePhoneBackup(){
- return {app:'Rack Stock Management',formatVersion:1,createdAt:new Date().toISOString(),items:data.items,transactions:data.tx,masterLists};
+ return {app:'Rack Stock Management',formatVersion:2,createdAt:new Date().toISOString(),items:data.items,transactions:data.tx,masterLists,racks:customRacks.slice()};
 }
 $('#backupJsonBtn').addEventListener('click',async()=>{
  const status=$('#backupStatus');const filename='Rack-Stock-Backup-'+new Date().toISOString().slice(0,10)+'.json';
@@ -243,9 +243,15 @@ $('#restoreJsonFile').addEventListener('change',async e=>{
   data.items=Array.from(itemMap.values());data.tx=Array.from(txMap.values());
   const savedLists=backup.masterLists||{};
   ['fabric','dia','brand','party','customer'].forEach(k=>{if(Array.isArray(savedLists[k]))savedLists[k].forEach(v=>addMasterChoice(k,v));});
+  const restoredRacks=Array.isArray(backup.racks)?backup.racks:[];
+  const legacyRackNames=data.items.map(x=>String(x.rack||'').replace(/-([AB])$/i,'')).filter(Boolean);
+  customRacks=[...new Set([...customRacks,...restoredRacks,...legacyRackNames])].sort((a,b)=>a.localeCompare(b,undefined,{numeric:true}));
+  localStorage.setItem(RACK_KEY,JSON.stringify(customRacks));
+  rackNames=customRacks.flatMap(n=>[n+'-A',n+'-B']);
+  fillRacks();
   save();
-  $('#backupStatus').textContent='Restore complete. Added missing records; existing records were kept.';
-  alert('Backup restored safely. Existing records were not deleted. Stock lines: '+data.items.length+'; transactions: '+data.tx.length+'.');
+  $('#backupStatus').textContent='Restore complete. Stock, transactions, rack names and lists merged safely.';
+  alert('Backup restored safely. Existing records were not deleted. Stock lines: '+data.items.length+'; transactions: '+data.tx.length+'; racks: '+customRacks.length+'.');
  }catch(err){alert('Restore failed: '+(err.message||err));}
  finally{e.target.value='';}
 });
