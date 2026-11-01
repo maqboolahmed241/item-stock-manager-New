@@ -22,8 +22,8 @@ main{max-width:1000px;margin:auto;padding:14px}nav{display:flex;gap:8px;overflow
 <nav><button class="tab active" data-tab="receive">Receive Stock</button><button class="tab" data-tab="issue">Issue Stock</button><button class="tab" data-tab="search">Search Stock</button><button class="tab" data-tab="history">History / Export</button><button type="button" id="adminBtn">Admin PIN / Login</button></nav>
 <section id="receive" class="panel card"><h2>Receive Stock</h2><form id="receiveForm"><div class="grid">
 <label>Rack Number<select name="rack" required id="rackSelect"></select></label>
-<label>Party Name<input name="party" required></label>
-<label>Customer Name<input name="customer" required></label>
+<label>Party Name<select name="party" id="partySelect" required><option value="">Select Party</option></select><button type="button" class="addChoice" data-list="party">+ Add Party</button></label>
+<label>Customer Name<select name="customer" id="customerSelect" required><option value="">Select Customer</option></select><button type="button" class="addChoice" data-list="customer">+ Add Customer</button></label>
 <label>Party Challan No.<input name="challan" required></label>
 <label>Dia / Gauge<select name="dia" id="diaSelect"><option value="">Select Dia / Gauge</option></select><button type="button" class="addChoice" data-list="dia">+ Add Dia / Gauge</button></label>
 <label>Fabric Type<select name="fabric" id="fabricSelect" required><option value="">Select Fabric</option></select><button type="button" class="addChoice" data-list="fabric">+ Add Fabric</button></label>
@@ -35,8 +35,8 @@ main{max-width:1000px;margin:auto;padding:14px}nav{display:flex;gap:8px;overflow
 <label>Rack Number<select name="rack" required class="rackOptions"></select></label>
 <label>Stock Line<select name="item" required id="issueItem"></select></label>
 <label>Issue Quantity<input name="qty" type="number" min="0.001" step="any" required></label>
-<label>Party Name<input name="party"></label>
-<label>Issued To / Customer<input name="to" required></label>
+<label>Party Name<select name="party" id="issuePartySelect"><option value="">Select Party</option></select><button type="button" class="addChoice" data-list="party">+ Add Party</button></label>
+<label>Issued To / Customer<select name="to" id="issueCustomerSelect" required><option value="">Select Customer</option></select><button type="button" class="addChoice" data-list="customer">+ Add Customer</button></label>
 <label>Challan / Reference<input name="challan"></label>
 <label>Color<input name="color" placeholder="e.g. Black, White, Red"></label>
 </div><button class="primary" type="submit">Record Stock Issue</button></form><p class="muted">Issue quantity cannot exceed available stock. Transactions remain in history.</p></section>
@@ -103,24 +103,24 @@ async function refreshCloudSession(){
 
 function id(prefix){return prefix+'-'+Date.now().toString(36).toUpperCase()+'-'+Math.random().toString(36).slice(2,6).toUpperCase()}
 const LIST_KEY='rack-stock-master-lists-v1';
-const masterLists=(()=>{try{const v=JSON.parse(localStorage.getItem(LIST_KEY))||{};return {fabric:Array.isArray(v.fabric)?v.fabric:[],dia:Array.isArray(v.dia)?v.dia:[],brand:Array.isArray(v.brand)?v.brand:[]};}catch(e){return {fabric:[],dia:[],brand:[]};}})();
+const masterLists=(()=>{try{const v=JSON.parse(localStorage.getItem(LIST_KEY))||{};return {fabric:Array.isArray(v.fabric)?v.fabric:[],dia:Array.isArray(v.dia)?v.dia:[],brand:Array.isArray(v.brand)?v.brand:[],party:Array.isArray(v.party)?v.party:[],customer:Array.isArray(v.customer)?v.customer:[]};}catch(e){return {fabric:[],dia:[],brand:[],party:[],customer:[]};}})();
 function saveMasterLists(){localStorage.setItem(LIST_KEY,JSON.stringify(masterLists));}
 function addMasterChoice(type,value){value=String(value||'').trim();if(!value)return false;if(!masterLists[type].some(v=>v.toLowerCase()===value.toLowerCase()))masterLists[type].push(value);masterLists[type].sort((a,b)=>a.localeCompare(b));saveMasterLists();renderMasterLists();return true;}
 function renderMasterLists(){
- const fields={fabric:['#fabricSelect','Select Fabric'],dia:['#diaSelect','Select Dia / Gauge'],brand:['#brandSelect','Select Brand']};
- Object.entries(fields).forEach(([type,[selector,placeholder]])=>{
-  const el=$(selector);if(!el)return;const current=el.value;
+ const fields={fabric:[['#fabricSelect'],'Select Fabric'],dia:[['#diaSelect'],'Select Dia / Gauge'],brand:[['#brandSelect'],'Select Brand'],party:[['#partySelect','#issuePartySelect'],'Select Party'],customer:[['#customerSelect','#issueCustomerSelect'],'Select Customer']};
+ Object.entries(fields).forEach(([type,[selectors,placeholder]])=>{
+  selectors.forEach(selector=>{const el=$(selector);if(!el)return;const current=el.value;
   el.innerHTML='<option value="">'+placeholder+'</option>'+masterLists[type].map(v=>'<option value="'+esc(v)+'">'+esc(v)+'</option>').join('');
-  if(masterLists[type].includes(current))el.value=current;
+  if(masterLists[type].includes(current))el.value=current;});
  });
 }
 document.querySelectorAll('.addChoice').forEach(btn=>btn.addEventListener('click',()=>{
- const type=btn.dataset.list;const labels={fabric:'Fabric name',dia:'Dia / Gauge',brand:'Brand name'};
+ const type=btn.dataset.list;const labels={fabric:'Fabric name',dia:'Dia / Gauge',brand:'Brand name',party:'Party name',customer:'Customer name'};
  const value=prompt('Add a new '+labels[type]+'. It will be saved in this phone for future selection:');
  if(value===null)return;
  if(!value.trim())return alert('Please enter a name.');
  addMasterChoice(type,value);
- const target=$('#'+type+'Select');target.value=value.trim();
+ const targets={fabric:['#fabricSelect'],dia:['#diaSelect'],brand:['#brandSelect'],party:['#partySelect','#issuePartySelect'],customer:['#customerSelect','#issueCustomerSelect']};targets[type].forEach(sel=>{const target=$(sel);if(target)target.value=value.trim();});
 }));
 function fillRacks(){const opts=rackNames.map(r=>'<option>'+r+'</option>').join('');$('#rackSelect').innerHTML=opts;document.querySelectorAll('.rackOptions').forEach(s=>s.innerHTML=opts)}
 function available(item){return item.received-item.issued}
@@ -155,7 +155,7 @@ $('#signupBtn').addEventListener('click',async()=>{const email=$('#cloudEmail').
 $('#syncBtn').addEventListener('click',()=>syncCloud());
 $('#logoutBtn').addEventListener('click',async()=>{const {error}=await cloud.auth.signOut();if(error){cloudMessage('Sign out failed: '+error.message);return;}cloudUser=null;cloudMessage('Signed out. Local records remain saved on this device.');});
 cloud.auth.onAuthStateChange((event,session)=>{cloudUser=session?.user||null;if(event==='SIGNED_IN'&&cloudUser)setTimeout(()=>syncCloud(),0);});
-data.items.forEach(i=>{addMasterChoice('fabric',i.fabric);addMasterChoice('dia',i.dia);addMasterChoice('brand',i.brand);});renderMasterLists();fillRacks();render();refreshCloudSession();
+data.items.forEach(i=>{addMasterChoice('fabric',i.fabric);addMasterChoice('dia',i.dia);addMasterChoice('brand',i.brand);addMasterChoice('party',i.party);addMasterChoice('customer',i.customer);});data.tx.forEach(t=>{addMasterChoice('party',t.party);addMasterChoice('customer',t.customer||t.to);});renderMasterLists();fillRacks();render();refreshCloudSession();
 
 </script>
 </body></html>
