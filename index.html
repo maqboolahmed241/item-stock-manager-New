@@ -11,13 +11,13 @@
 main{max-width:1000px;margin:auto;padding:14px}nav{display:flex;gap:8px;overflow:auto;margin-bottom:14px}button,.tab{border:0;border-radius:10px;padding:11px 14px;font:inherit;font-weight:650;cursor:pointer;background:#e0e8e2;color:#183b2b;white-space:nowrap}.tab.active,button.primary{background:#1f6a49;color:white}
 .card{background:white;border:1px solid #dfe6e0;border-radius:14px;padding:15px;margin-bottom:14px;box-shadow:0 2px 8px #102b1b08}.card h2{font-size:1.05rem;margin:0 0 12px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:10px}label{font-size:.82rem;font-weight:650;display:block;color:#42544a}input,select{display:block;width:100%;margin-top:5px;padding:11px;border:1px solid #cbd6ce;border-radius:8px;background:#fff;font:inherit;color:#17251d}form button{margin-top:12px;width:100%}.addChoice{margin-top:5px;width:100%;padding:7px;font-size:.78rem;background:#edf5ef;color:#1f6a49}.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.stat{background:#edf5ef;padding:12px;border-radius:10px}.stat strong{display:block;font-size:1.35rem}.stat span{font-size:.75rem;color:#4b6255}table{width:100%;border-collapse:collapse;font-size:.85rem}th,td{text-align:left;padding:9px;border-bottom:1px solid #e3e9e4;vertical-align:top}th{background:#f2f6f3} .tablewrap{overflow:auto}.muted{color:#617067;font-size:.85rem}.hidden{display:none!important}.warn{background:#fff6df;border:1px solid #ecd69a;padding:10px;border-radius:9px;font-size:.86rem}
 @media(max-width:480px){.stats{grid-template-columns:1fr 1fr}.stats .stat:last-child{grid-column:span 2}th,td{padding:7px}}
+.account-folder{background:linear-gradient(135deg,#102d25,#1c6047);color:#fff;border-radius:18px;margin:0 0 14px;box-shadow:0 8px 24px #102b1b24;overflow:hidden}.account-folder summary{list-style:none;display:flex;align-items:center;gap:13px;padding:16px;cursor:pointer}.account-folder summary::-webkit-details-marker{display:none}.folder-icon{display:grid;place-items:center;width:44px;height:44px;border-radius:13px;background:#ffffff20;font-size:23px}.account-folder summary strong{display:block;font-size:1rem}.account-folder summary small{display:block;color:#c6e3d2;margin-top:3px}.folder-arrow{margin-left:auto;font-size:22px;transition:transform .2s}.account-folder[open] .folder-arrow{transform:rotate(180deg)}.account-content{background:#fff;color:#18231f;padding:15px;border-top:1px solid #ffffff30}.account-content .muted{color:#617067}.account-content form button{width:auto}.account-content input{min-width:0}
 </style>
 </head>
 <body>
 <header><h1>Rack Stock Management</h1><p>Receive • Issue • Search • Stock History</p></header>
 <main>
-<div class="warn"><strong>Cloud setup:</strong> Sign in with the same account on both phones to sync rack stock. Keep your email and password private.</div>
-<div class="card" id="cloudCard"><h2>Cloud Login / Sync</h2><p class="muted" id="cloudStatus">Not signed in. Your existing records remain saved on this device.</p><form id="cloudForm"><div class="grid"><label>Email<input id="cloudEmail" type="email" autocomplete="email" required></label><label>Password<input id="cloudPassword" type="password" autocomplete="current-password" minlength="6" required></label></div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button class="primary" type="submit" id="loginBtn">Sign in</button><button type="button" id="signupBtn">Create account</button><button type="button" id="syncBtn">Sync now</button><button type="button" id="logoutBtn">Sign out</button></div></form><p class="muted">First use: create one account, then sign in with that same account on the second phone. When cloud is empty, this phone's existing records will be uploaded first.</p></div>
+<details class="account-folder" id="cloudCard"><summary><span class="folder-icon">☁</span><span><strong>Account & Cloud Sync</strong><small>Login ID • Password • Two-phone sync</small></span><span class="folder-arrow">⌄</span></summary><div class="account-content"><p class="muted" id="cloudStatus">Not signed in. Your existing records remain saved on this device.</p><form id="cloudForm"><div class="grid"><label>Email / Login ID<input id="cloudEmail" type="email" autocomplete="email" required></label><label>Password<input id="cloudPassword" type="password" autocomplete="current-password" minlength="6" required></label></div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button class="primary" type="submit" id="loginBtn">Sign in</button><button type="button" id="signupBtn">Create account</button><button type="button" id="syncBtn">Sync now</button><button type="button" id="logoutBtn">Sign out</button></div></form><p class="muted">Use the same account on both phones to sync stock. Keep your password private.</p></div></details>
 <div class="card"><div class="stats"><div class="stat"><strong id="rackCount">250</strong><span>Racks available</span></div><div class="stat"><strong id="itemCount">0</strong><span>Stock lines in hand</span></div><div class="stat"><strong id="totalQty">0</strong><span>Total available quantity</span></div></div></div>
 <nav><button class="tab active" data-tab="receive">Receive Stock</button><button class="tab" data-tab="issue">Issue Stock</button><button class="tab" data-tab="search">Search Stock</button><button class="tab" data-tab="history">History / Export</button><button type="button" id="adminBtn">Admin PIN / Login</button></nav>
 <section id="receive" class="panel card"><h2>Receive Stock</h2><form id="receiveForm"><div class="grid">
@@ -182,17 +182,16 @@ $('#backupJsonBtn').addEventListener('click',async()=>{
  const status=$('#backupStatus');const filename='Rack-Stock-Backup-'+new Date().toISOString().replace(/[:.]/g,'-')+'.json';
  try{
   const json=JSON.stringify(makePhoneBackup(),null,2);
-  if(window.NativeRackPlugins&&window.NativeRackPlugins.saveBackup){
-   status.textContent='Saving backup to phone Documents…';
-   const result=await window.NativeRackPlugins.saveBackup(json,filename);
-   status.textContent='Backup saved successfully in phone Documents: '+filename;
-   alert('Backup saved on this phone in Documents. Keep this file safe.');
+  if(window.NativeRackPlugins&&window.NativeRackPlugins.saveAndShareBackup){
+   status.textContent='Preparing backup file…';
+   await window.NativeRackPlugins.saveAndShareBackup(json,filename);
+   status.textContent='Backup file is ready. In the Android share menu choose Save to Files, Files, or Downloads to keep it on your phone.';
   }else{
    const blob=new Blob([json],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');
-   a.href=url;a.download=filename;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),3000);
-   status.textContent='Download requested. Check Downloads folder; if no file appears, use the APK with native backup support.';
+   a.href=url;a.download=filename;a.click();setTimeout(()=>URL.revokeObjectURL(url),10000);
+   status.textContent='Download started. Open Downloads and confirm the JSON backup file is there.';
   }
- }catch(e){status.textContent='Backup failed: '+(e.message||e);alert('Backup save failed: '+(e.message||e));}
+ }catch(e){status.textContent='Backup could not be prepared: '+(e.message||e);alert('Backup failed: '+(e.message||e));}
 });
 $('#restoreJsonBtn').addEventListener('click',()=>$('#restoreJsonFile').click());
 $('#restoreJsonFile').addEventListener('change',async e=>{
