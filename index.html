@@ -41,7 +41,9 @@ main{max-width:1000px;margin:auto;padding:14px}nav{display:flex;gap:8px;overflow
 <label>Color<input name="color" placeholder="e.g. Black, White, Red"></label>
 </div><button class="primary" type="submit">Record Stock Issue</button></form><p class="muted">Issue quantity cannot exceed available stock. Transactions remain in history.</p></section>
 <section id="search" class="panel card hidden"><h2>Search Stock</h2><label>Rack, party, customer, challan, fabric or transaction ID<input id="searchInput" placeholder="Type to search…"></label><div style="display:flex;gap:8px;flex-wrap:wrap;margin:12px 0"><button id="shareReport" class="primary" type="button">Share Report</button><button id="whatsappReport" type="button">Share on WhatsApp</button><button id="allStockReport" type="button">Share All Department Stock</button><button id="smsReport" type="button">Share by SMS</button><button id="printReport" type="button">Print / Save PDF</button></div><p class="muted">Share Report, WhatsApp, SMS and Print use the current search results. “Share All Department Stock” includes every recorded rack stock line, including fully issued lines.</p><div id="searchResults" class="tablewrap"></div></section>
- <section id="history" class="panel card hidden"><h2>Transaction History</h2><div id="adminDataTools" class="warn hidden" style="margin-bottom:12px"><strong>Admin Data Controls</strong><p class="muted">Delete an incorrect stock line or clear all test records. These actions cannot be undone.</p><button id="resetAllBtn" type="button" style="background:#a52d2d;color:white">Reset All Stock & History</button></div><button id="exportBtn" class="primary">Export CSV</button> <button id="clearSearch">Show All</button><div id="historyTable" class="tablewrap"></div></section>
+ <section id="history" class="panel card hidden"><h2>Transaction History</h2><div id="adminDataTools" class="warn hidden" style="margin-bottom:12px"><strong>Admin Data Controls</strong><p class="muted">Delete an incorrect stock line or clear all test records. These actions cannot be undone.</p><button id="resetAllBtn" type="button" style="background:#a52d2d;color:white">Reset All Stock & History</button></div><button id="exportBtn" class="primary">Export CSV</button>
+<div class="warn" style="margin:12px 0"><strong>Phone Backup / Restore</strong><p class="muted">Save a complete backup file on this phone. Restore adds missing records without deleting the records already in this app.</p><button id="backupJsonBtn" type="button" class="primary">Save Backup to Phone</button> <button id="restoreJsonBtn" type="button">Restore from Phone</button><input id="restoreJsonFile" type="file" accept=".json,application/json" style="display:none"><p id="backupStatus" class="muted">Keep the downloaded JSON backup file safe in your phone.</p></div>
+<button id="clearSearch">Show All</button><div id="historyTable" class="tablewrap"></div></section>
 <p class="muted">Transaction IDs are generated automatically. Data is kept on this device in this preview.</p>
 </main>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -167,6 +169,38 @@ $('#allStockReport').addEventListener('click',()=>shareWhatsApp(stockReport(data
 $('#smsReport').addEventListener('click',()=>{location.href='sms:?body='+encodeURIComponent(reportText())});
 $('#printReport').addEventListener('click',()=>{const w=window.open('','_blank');if(!w){alert('Allow pop-ups to print or save PDF.');return;}w.document.write('<html><head><title>Rack Stock Report</title><style>body{font:14px Arial;padding:24px}pre{white-space:pre-wrap;word-break:break-word}</style></head><body><h2>Rack Stock Report</h2><pre>'+esc(reportText())+'</pre><script>window.onload=()=>window.print()<\/script></body></html>');w.document.close()});
 $('#searchInput').addEventListener('input',drawSearch);$('#clearSearch').addEventListener('click',()=>{drawHistory(data.tx)});
+function makePhoneBackup(){
+ return {app:'Rack Stock Management',formatVersion:1,createdAt:new Date().toISOString(),items:data.items,transactions:data.tx,masterLists};
+}
+$('#backupJsonBtn').addEventListener('click',()=>{
+ try{
+  const blob=new Blob([JSON.stringify(makePhoneBackup(),null,2)],{type:'application/json'});
+  const url=URL.createObjectURL(blob),a=document.createElement('a');
+  a.href=url;a.download='Rack-Stock-Backup-'+new Date().toISOString().slice(0,10)+'.json';
+  document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1500);
+  $('#backupStatus').textContent='Backup file created. Check your phone Downloads folder and keep this file safe.';
+ }catch(e){alert('Backup could not be created: '+(e.message||e));}
+});
+$('#restoreJsonBtn').addEventListener('click',()=>$('#restoreJsonFile').click());
+$('#restoreJsonFile').addEventListener('change',async e=>{
+ const file=e.target.files&&e.target.files[0];if(!file)return;
+ try{
+  const backup=JSON.parse(await file.text());
+  if(!backup||backup.app!=='Rack Stock Management'||!Array.isArray(backup.items)||!Array.isArray(backup.transactions))throw new Error('This is not a valid Rack Stock Management backup file.');
+  if(!confirm('Restore this backup by adding missing stock lines and transactions? Existing records will NOT be deleted.'))return;
+  const itemMap=new Map(data.items.map(x=>[String(x.id),x]));
+  backup.items.forEach(x=>{if(x&&x.id&&!itemMap.has(String(x.id)))itemMap.set(String(x.id),x)});
+  const txMap=new Map(data.tx.map(x=>[String(x.id),x]));
+  backup.transactions.forEach(x=>{if(x&&x.id&&!txMap.has(String(x.id)))txMap.set(String(x.id),x)});
+  data.items=Array.from(itemMap.values());data.tx=Array.from(txMap.values());
+  const savedLists=backup.masterLists||{};
+  ['fabric','dia','brand','party','customer'].forEach(k=>{if(Array.isArray(savedLists[k]))savedLists[k].forEach(v=>addMasterChoice(k,v));});
+  save();
+  $('#backupStatus').textContent='Restore complete. Added missing records; existing records were kept.';
+  alert('Backup restored safely. Existing records were not deleted. Stock lines: '+data.items.length+'; transactions: '+data.tx.length+'.');
+ }catch(err){alert('Restore failed: '+(err.message||err));}
+ finally{e.target.value='';}
+});
 $('#exportBtn').addEventListener('click',()=>{const cols=['id','type','time','rack','fabric','qty','color','party','customer','to','challan','itemId','editedAt'];const csv=[cols.join(','),...data.tx.map(t=>cols.map(k=>'"'+String(t[k]??'').replace(/"/g,'""')+'"').join(','))].join('\r\n');const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));a.download='rack-stock-transactions.csv';a.click();URL.revokeObjectURL(a.href)});
 
 $('#cloudForm').addEventListener('submit',async e=>{e.preventDefault();const email=$('#cloudEmail').value.trim(),password=$('#cloudPassword').value;cloudMessage('Signing in…');const {data:res,error}=await cloud.auth.signInWithPassword({email,password});if(error){cloudMessage('Sign in failed: '+error.message);return;}cloudUser=res.user;await syncCloud();});
