@@ -47,6 +47,7 @@ main{max-width:1000px;margin:auto;padding:14px}nav{display:flex;gap:8px;overflow
 <p class="muted">Transaction IDs are generated automatically. Data is kept on this device in this preview.</p>
 </main>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="./native-bridge.js"></script>
 <script>
 const SUPABASE_URL="https://xgodqvkavczpeziliinc.supabase.co";
 const SUPABASE_KEY="sb_publishable_hbQapnbAfT0ZuUWykyYIFQ_bp8YBg1K";
@@ -162,7 +163,12 @@ function stockReport(rows,title){
  return header.concat([sections.join(NL+NL)]).concat(summary).join(NL+NL);
 }
 function reportText(){const q=($('#searchInput').value||'').trim().toLowerCase();const rows=data.items.filter(i=>available(i)>0&&(!q||[i.rack,i.fabric,i.dia,i.count,i.brand].some(v=>String(v||'').toLowerCase().includes(q))));return stockReport(rows,'DEPARTMENT STOCK REPORT');}
-function shareWhatsApp(txt){location.href='https://wa.me/?text='+encodeURIComponent(txt);}
+async function shareWhatsApp(txt){
+ try{
+  if(window.NativeRackPlugins&&window.NativeRackPlugins.shareText){await window.NativeRackPlugins.shareText(txt);return;}
+  location.href='https://wa.me/?text='+encodeURIComponent(txt);
+ }catch(e){location.href='https://wa.me/?text='+encodeURIComponent(txt);}
+}
 $('#shareReport').addEventListener('click',async()=>{const txt=reportText();if(navigator.share){try{await navigator.share({title:'Department Stock Report',text:txt})}catch(e){}}else{shareWhatsApp(txt)}});
 $('#whatsappReport').addEventListener('click',()=>shareWhatsApp(reportText()));
 $('#allStockReport').addEventListener('click',()=>shareWhatsApp(stockReport(data.items,'FULL DEPARTMENT STOCK REPORT')));
@@ -172,14 +178,21 @@ $('#searchInput').addEventListener('input',drawSearch);$('#clearSearch').addEven
 function makePhoneBackup(){
  return {app:'Rack Stock Management',formatVersion:1,createdAt:new Date().toISOString(),items:data.items,transactions:data.tx,masterLists};
 }
-$('#backupJsonBtn').addEventListener('click',()=>{
+$('#backupJsonBtn').addEventListener('click',async()=>{
+ const status=$('#backupStatus');const filename='Rack-Stock-Backup-'+new Date().toISOString().replace(/[:.]/g,'-')+'.json';
  try{
-  const blob=new Blob([JSON.stringify(makePhoneBackup(),null,2)],{type:'application/json'});
-  const url=URL.createObjectURL(blob),a=document.createElement('a');
-  a.href=url;a.download='Rack-Stock-Backup-'+new Date().toISOString().slice(0,10)+'.json';
-  document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1500);
-  $('#backupStatus').textContent='Backup file created. Check your phone Downloads folder and keep this file safe.';
- }catch(e){alert('Backup could not be created: '+(e.message||e));}
+  const json=JSON.stringify(makePhoneBackup(),null,2);
+  if(window.NativeRackPlugins&&window.NativeRackPlugins.saveBackup){
+   status.textContent='Saving backup to phone Documents…';
+   const result=await window.NativeRackPlugins.saveBackup(json,filename);
+   status.textContent='Backup saved successfully in phone Documents: '+filename;
+   alert('Backup saved on this phone in Documents. Keep this file safe.');
+  }else{
+   const blob=new Blob([json],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');
+   a.href=url;a.download=filename;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),3000);
+   status.textContent='Download requested. Check Downloads folder; if no file appears, use the APK with native backup support.';
+  }
+ }catch(e){status.textContent='Backup failed: '+(e.message||e);alert('Backup save failed: '+(e.message||e));}
 });
 $('#restoreJsonBtn').addEventListener('click',()=>$('#restoreJsonFile').click());
 $('#restoreJsonFile').addEventListener('change',async e=>{
