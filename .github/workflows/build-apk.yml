@@ -6,6 +6,7 @@ on:
     branches: [main]
     paths:
       - 'index.html'
+      - 'native-bridge.js'
       - 'package.json'
       - 'package-lock.json'
       - 'capacitor.config.json'
@@ -34,9 +35,9 @@ jobs:
         run: npx cap add android
       - name: Add Android Save As backup plugin
         run: |
-          mkdir -p android/app/src/main/java/com/maqbool/rackstock
-          cat > android/app/src/main/java/com/maqbool/rackstock/MainActivity.java <<'EOF'
-          package com.maqbool.rackstock;
+          mkdir -p android/app/src/main/java/com/maqbool/rackstock/v2
+          cat > android/app/src/main/java/com/maqbool/rackstock/v2/MainActivity.java <<'EOF'
+          package com.maqbool.rackstock.v2;
           import android.os.Bundle;
           import com.getcapacitor.BridgeActivity;
           public class MainActivity extends BridgeActivity {
@@ -47,8 +48,8 @@ jobs:
             }
           }
           EOF
-          cat > android/app/src/main/java/com/maqbool/rackstock/BackupSaverPlugin.java <<'EOF'
-          package com.maqbool.rackstock;
+          cat > android/app/src/main/java/com/maqbool/rackstock/v2/BackupSaverPlugin.java <<'EOF'
+          package com.maqbool.rackstock.v2;
           import android.app.Activity;
           import android.content.Intent;
           import android.net.Uri;
