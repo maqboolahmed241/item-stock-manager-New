@@ -140,20 +140,24 @@ async function deleteStockLine(itemId){if(!adminMode)return alert('Admin PIN req
 async function deleteTransaction(txId){if(!adminMode)return alert('Admin PIN required.');const tx=data.tx.find(t=>t.id===txId);if(!tx)return;const item=data.items.find(i=>i.id===tx.itemId);if(!item)return alert('Related stock line not found.');if(!confirm('Delete this '+tx.type+' transaction? Stock quantity will be recalculated.'))return;let nextReceived=item.received,nextIssued=item.issued;if(tx.type==='RECEIVE')nextReceived-=Number(tx.qty);else if(tx.type==='ISSUE')nextIssued-=Number(tx.qty);if(nextReceived<0||nextIssued<0||nextReceived<nextIssued)return alert('Cannot delete this entry because it would make stock quantities invalid. Delete the complete stock line instead.');try{if(cloudUser)await deleteCloudRows('stock_transactions',[txId]);item.received=nextReceived;item.issued=nextIssued;data.tx=data.tx.filter(t=>t.id!==txId);save();alert('Transaction deleted and stock totals recalculated.');}catch(e){alert('Cloud delete failed. No local data was changed. '+(e.message||e));}}
 $('#resetAllBtn').addEventListener('click',async()=>{if(!adminMode)return alert('Admin PIN required.');if(!confirm('RESET ALL TEST DATA? This deletes every rack stock line and every receiving/issuing transaction. Staff login and Admin PIN remain.'))return;if(prompt('Type DELETE to confirm the permanent reset:')!=='DELETE')return alert('Reset cancelled.');try{if(cloudUser){await deleteCloudRows('stock_transactions');await deleteCloudRows('stock_items');}else if(!confirm('You are not signed in to Cloud. This will clear ONLY this phone. Continue?'))return;data={items:[],tx:[]};localStorage.setItem(KEY,JSON.stringify(data));render();alert(cloudUser?'All stock and transaction records cleared from Cloud and this phone.':'All stock and transaction records cleared from this phone only. Sign in and reset the other phone separately.');}catch(e){alert('Cloud reset failed. No local data was deleted. '+(e.message||e));}});
 function stockReport(rows,title){
+ const NL=String.fromCharCode(10);
  const current=rows.filter(i=>available(i)>0).sort((a,b)=>String(a.rack).localeCompare(String(b.rack),undefined,{numeric:true}));
  const groups=new Map();
  current.forEach(i=>{const key=i.rack||'Unassigned Rack';if(!groups.has(key))groups.set(key,[]);groups.get(key).push(i)});
- const body=[...groups.entries()].map(([rack,items])=>{
+ const sections=[...groups.entries()].map(([rack,items])=>{
   const lines=items.map((i,index)=>[
-   (index+1)+') '+(i.fabric||'Item not named'),
-   '   Dia/Gauge: '+(i.dia||'-'),
+   (index+1)+'. '+(i.fabric||'Item not named'),
+   '   Dia / Gauge: '+(i.dia||'-'),
    '   Count: '+(i.count||'-'),
    '   Brand: '+(i.brand||'-'),
-   '   Available Quantity: '+available(i)
-  ].join('\n'));
-  return 'RACK: '+rack+'\n'+'------------------------------\n'+lines.join('\n\n');
- }).join('\n\n');
- return title+'\n'+'Date & Time: '+new Date().toLocaleString()+'\n'+'==============================\n\n'+(body||'No available stock in racks.')+'\n\n'+'==============================\n'+'REPORT SUMMARY\n'+'Total item lines: '+current.length+'\n'+'Total available quantity: '+current.reduce((sum,i)=>sum+available(i),0);
+   '   Available Stock: '+available(i)
+  ].join(NL));
+  const rackTotal=items.reduce((sum,i)=>sum+available(i),0);
+  return 'RACK NO: '+rack+NL+'ITEMS IN THIS RACK: '+items.length+NL+'--------------------------------'+NL+lines.join(NL+NL)+NL+'--------------------------------'+NL+'RACK TOTAL: '+rackTotal;
+ });
+ const header=[title,'Purpose: Current available stock, shown separately for each rack and each item.','Generated: '+new Date().toLocaleString(),'================================'];
+ const summary=['================================','OVERALL SUMMARY','Total racks: '+groups.size,'Total item lines: '+current.length,'Total available quantity: '+current.reduce((sum,i)=>sum+available(i),0),'','Note: Each numbered entry is a separate stock item.'];
+ return header.concat([sections.join(NL+NL)]).concat(summary).join(NL+NL);
 }
 function reportText(){const q=($('#searchInput').value||'').trim().toLowerCase();const rows=data.items.filter(i=>available(i)>0&&(!q||[i.rack,i.fabric,i.dia,i.count,i.brand].some(v=>String(v||'').toLowerCase().includes(q))));return stockReport(rows,'DEPARTMENT STOCK REPORT');}
 function shareWhatsApp(txt){location.href='https://wa.me/?text='+encodeURIComponent(txt);}
